@@ -4842,7 +4842,7 @@ static struct elevator_type iosched_cfq = {
 	.icq_size	=	sizeof(struct cfq_io_cq),
 	.icq_align	=	__alignof__(struct cfq_io_cq),
 	.elevator_attrs =	cfq_attrs,
-	.elevator_name	=	"cfq",
+	.elevator_name	=	"fios",
 	.elevator_owner =	THIS_MODULE,
 };
 
@@ -4864,7 +4864,7 @@ static struct blkcg_policy blkcg_policy_cfq = {
 };
 #endif
 
-static int __init cfq_init(void)
+static int __init fios_init(void)
 {
 	int ret;
 
@@ -4896,7 +4896,7 @@ err_pol_unreg:
 	return ret;
 }
 
-static void __exit cfq_exit(void)
+static void __exit fios_exit(void)
 {
 #ifdef CONFIG_CFQ_GROUP_IOSCHED
 	blkcg_policy_unregister(&blkcg_policy_cfq);
@@ -4905,9 +4905,9 @@ static void __exit cfq_exit(void)
 	kmem_cache_destroy(cfq_pool);
 }
 
-module_init(cfq_init);
-module_exit(cfq_exit);
+module_init(fios_init);
+module_exit(fios_exit);
 
-MODULE_AUTHOR("Jens Axboe");
+MODULE_AUTHOR("CQUCS");
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Completely Fair Queueing IO scheduler");
+MODULE_DESCRIPTION("FIOS");
