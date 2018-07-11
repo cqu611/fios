@@ -3,6 +3,8 @@
 echo "====SHOW_FUNCTION===="
 echo -e "alpha = \c"
 cat /sys/block/sda/queue/iosched/alpha
+echo -e "T service = \c"
+cat /sys/block/sda/queue/iosched/tservice
 echo -e "quantum = \c"
 cat /sys/block/sda/queue/iosched/quantum
 echo -e "fifo_expire[1](sync)= \c"

@@ -23,7 +23,8 @@
  * tunables
  */
 /* max queue in one round of service */
-static const int cfq_alpha = 128;///xx - init alpha=128(0.5), 0 <= alpha < 256
+static const int cfq_alpha = 50;///xx - default alpha=50(0.5), 0 <= alpha < 100
+static const int cfq_tservice = 8;///xx - Tservice, default=8ms, calc for anticipation
 static const int cfq_quantum = 8;
 static const u64 cfq_fifo_expire[2] = { NSEC_PER_SEC / 4, NSEC_PER_SEC / 8 };
 /* maximum backwards seek, in KiB */
@@ -382,6 +383,7 @@ struct cfq_data {
 	 * tunables, see top of file
 	 */
 	unsigned int cfq_alpha;///xx - alpha threshold, for calc anticipation.
+	unsigned int cfq_tservice;///xx - Tservice, for calc anticipation.
 	unsigned int cfq_quantum;
 	unsigned int cfq_back_penalty;
 	unsigned int cfq_back_max;
@@ -4677,6 +4679,7 @@ static void cfq_registered_queue(struct request_queue *q)
 	struct elevator_queue *e = q->elevator;
 	struct cfq_data *cfqd = e->elevator_data;
 
+	cfqd->cfq_slice_idle = cfqd->cfq_tservice * (cfqd->cfq_alpha / (100 - cfqd->cfq_alpha));///xx
 	///xx - delete 'SSD check'
 	wbt_disable_default(q);
 }
@@ -4709,6 +4712,7 @@ static ssize_t __FUNC(struct elevator_queue *e, char *page)		\
 }
 SHOW_FUNCTION(cfq_quantum_show, cfqd->cfq_quantum, 0);
 SHOW_FUNCTION(cfq_alpha_show, cfqd->cfq_alpha, 0);///xx
+SHOW_FUNCTION(cfq_tservice_show, cfqd->cfq_tservice, 0);///xx
 SHOW_FUNCTION(cfq_fifo_expire_sync_show, cfqd->cfq_fifo_expire[1], 1);
 SHOW_FUNCTION(cfq_fifo_expire_async_show, cfqd->cfq_fifo_expire[0], 1);
 SHOW_FUNCTION(cfq_back_seek_max_show, cfqd->cfq_back_max, 0);
@@ -4753,7 +4757,8 @@ static ssize_t __FUNC(struct elevator_queue *e, const char *page, size_t count)	
 		*(__PTR) = __data;					\
 	return count;							\
 }
-STORE_FUNCTION(cfq_alpha_store, &cfqd->cfq_alpha, 0, 255, 0);///xx
+STORE_FUNCTION(cfq_alpha_store, &cfqd->cfq_alpha, 0, 99, 0);///xx
+STORE_FUNCTION(cfq_tservice_store, &cfqd->cfq_tserivce, 0, UINT_MAX, 0);///xx
 STORE_FUNCTION(cfq_quantum_store, &cfqd->cfq_quantum, 1, UINT_MAX, 0);
 STORE_FUNCTION(cfq_fifo_expire_sync_store, &cfqd->cfq_fifo_expire[1], 1,
 		UINT_MAX, 1);
@@ -4797,6 +4802,7 @@ USEC_STORE_FUNCTION(cfq_target_latency_us_store, &cfqd->cfq_target_latency, 1, U
 
 static struct elv_fs_entry cfq_attrs[] = {
 	CFQ_ATTR(alpha),///xx
+	CFQ_ATTR(tservice),///xx
 	CFQ_ATTR(quantum),
 	CFQ_ATTR(fifo_expire_sync),
 	CFQ_ATTR(fifo_expire_async),
