@@ -23,6 +23,7 @@
  * tunables
  */
 /* max queue in one round of service */
+static const unsigned char alpha = 128;///xx - init alpha=128(0.5), 0 <= alpha < 256
 static const int cfq_quantum = 8;
 static const u64 cfq_fifo_expire[2] = { NSEC_PER_SEC / 4, NSEC_PER_SEC / 8 };
 /* maximum backwards seek, in KiB */
@@ -380,6 +381,7 @@ struct cfq_data {
 	/*
 	 * tunables, see top of file
 	 */
+	unsigned char alpha;///xx - alpha threshold, for calc anticipation.
 	unsigned int cfq_quantum;
 	unsigned int cfq_back_penalty;
 	unsigned int cfq_back_max;
@@ -4643,6 +4645,7 @@ static int cfq_init_queue(struct request_queue *q, struct elevator_type *e)
 
 	INIT_WORK(&cfqd->unplug_work, cfq_kick_queue);
 
+	cfqd->alpha = alpha;///xx
 	cfqd->cfq_quantum = cfq_quantum;
 	cfqd->cfq_fifo_expire[0] = cfq_fifo_expire[0];
 	cfqd->cfq_fifo_expire[1] = cfq_fifo_expire[1];
@@ -4674,11 +4677,7 @@ static void cfq_registered_queue(struct request_queue *q)
 	struct elevator_queue *e = q->elevator;
 	struct cfq_data *cfqd = e->elevator_data;
 
-	/*
-	 * Default to IOPS mode with no idling for SSDs
-	 */
-	if (blk_queue_nonrot(q))
-		cfqd->cfq_slice_idle = 0;
+	///xx - delete 'SSD check'
 	wbt_disable_default(q);
 }
 
@@ -4708,6 +4707,7 @@ static ssize_t __FUNC(struct elevator_queue *e, char *page)		\
 		__data = div_u64(__data, NSEC_PER_MSEC);			\
 	return cfq_var_show(__data, (page));				\
 }
+SHOW_FNUCTION(cfq_alpha_show, cfqd->alpha, 0);///xx
 SHOW_FUNCTION(cfq_quantum_show, cfqd->cfq_quantum, 0);
 SHOW_FUNCTION(cfq_fifo_expire_sync_show, cfqd->cfq_fifo_expire[1], 1);
 SHOW_FUNCTION(cfq_fifo_expire_async_show, cfqd->cfq_fifo_expire[0], 1);
@@ -4753,6 +4753,7 @@ static ssize_t __FUNC(struct elevator_queue *e, const char *page, size_t count)	
 		*(__PTR) = __data;					\
 	return count;							\
 }
+STORE_FUNCTION(cfq_alpha_store, &cfqd->alpha, 0, 255, 0);///xx
 STORE_FUNCTION(cfq_quantum_store, &cfqd->cfq_quantum, 1, UINT_MAX, 0);
 STORE_FUNCTION(cfq_fifo_expire_sync_store, &cfqd->cfq_fifo_expire[1], 1,
 		UINT_MAX, 1);
