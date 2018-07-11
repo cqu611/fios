@@ -23,7 +23,7 @@
  * tunables
  */
 /* max queue in one round of service */
-static const unsigned char alpha = 128;///xx - init alpha=128(0.5), 0 <= alpha < 256
+static const int cfq_alpha = 128;///xx - init alpha=128(0.5), 0 <= alpha < 256
 static const int cfq_quantum = 8;
 static const u64 cfq_fifo_expire[2] = { NSEC_PER_SEC / 4, NSEC_PER_SEC / 8 };
 /* maximum backwards seek, in KiB */
@@ -381,7 +381,7 @@ struct cfq_data {
 	/*
 	 * tunables, see top of file
 	 */
-	unsigned char alpha;///xx - alpha threshold, for calc anticipation.
+	unsigned int cfq_alpha;///xx - alpha threshold, for calc anticipation.
 	unsigned int cfq_quantum;
 	unsigned int cfq_back_penalty;
 	unsigned int cfq_back_max;
@@ -4645,7 +4645,7 @@ static int cfq_init_queue(struct request_queue *q, struct elevator_type *e)
 
 	INIT_WORK(&cfqd->unplug_work, cfq_kick_queue);
 
-	cfqd->alpha = alpha;///xx
+	cfqd->cfq_alpha = cfq_alpha;///xx
 	cfqd->cfq_quantum = cfq_quantum;
 	cfqd->cfq_fifo_expire[0] = cfq_fifo_expire[0];
 	cfqd->cfq_fifo_expire[1] = cfq_fifo_expire[1];
@@ -4707,7 +4707,7 @@ static ssize_t __FUNC(struct elevator_queue *e, char *page)		\
 		__data = div_u64(__data, NSEC_PER_MSEC);			\
 	return cfq_var_show(__data, (page));				\
 }
-SHOW_FNUCTION(cfq_alpha_show, cfqd->alpha, 0);///xx
+SHOW_FNUCTION(cfq_alpha_show, cfqd->cfq_alpha, 0);///xx
 SHOW_FUNCTION(cfq_quantum_show, cfqd->cfq_quantum, 0);
 SHOW_FUNCTION(cfq_fifo_expire_sync_show, cfqd->cfq_fifo_expire[1], 1);
 SHOW_FUNCTION(cfq_fifo_expire_async_show, cfqd->cfq_fifo_expire[0], 1);
@@ -4753,7 +4753,7 @@ static ssize_t __FUNC(struct elevator_queue *e, const char *page, size_t count)	
 		*(__PTR) = __data;					\
 	return count;							\
 }
-STORE_FUNCTION(cfq_alpha_store, &cfqd->alpha, 0, 255, 0);///xx
+STORE_FUNCTION(cfq_alpha_store, &cfqd->cfq_alpha, 0, 255, 0);///xx
 STORE_FUNCTION(cfq_quantum_store, &cfqd->cfq_quantum, 1, UINT_MAX, 0);
 STORE_FUNCTION(cfq_fifo_expire_sync_store, &cfqd->cfq_fifo_expire[1], 1,
 		UINT_MAX, 1);
@@ -4796,7 +4796,7 @@ USEC_STORE_FUNCTION(cfq_target_latency_us_store, &cfqd->cfq_target_latency, 1, U
 	__ATTR(name, S_IRUGO|S_IWUSR, cfq_##name##_show, cfq_##name##_store)
 
 static struct elv_fs_entry cfq_attrs[] = {
-	CFQ_ATTR(alpha),
+	CFQ_ATTR(alpha),///xx
 	CFQ_ATTR(quantum),
 	CFQ_ATTR(fifo_expire_sync),
 	CFQ_ATTR(fifo_expire_async),
@@ -4844,7 +4844,7 @@ static struct elevator_type iosched_cfq = {
 	.icq_size	=	sizeof(struct cfq_io_cq),
 	.icq_align	=	__alignof__(struct cfq_io_cq),
 	.elevator_attrs =	cfq_attrs,
-	.elevator_name	=	"fios",
+	.elevator_name	=	"fios",///xx
 	.elevator_owner =	THIS_MODULE,
 };
 
@@ -4866,7 +4866,7 @@ static struct blkcg_policy blkcg_policy_cfq = {
 };
 #endif
 
-static int __init fios_init(void)
+static int __init fios_init(void)///xx
 {
 	int ret;
 
@@ -4898,7 +4898,7 @@ err_pol_unreg:
 	return ret;
 }
 
-static void __exit fios_exit(void)
+static void __exit fios_exit(void)///xx
 {
 #ifdef CONFIG_CFQ_GROUP_IOSCHED
 	blkcg_policy_unregister(&blkcg_policy_cfq);
@@ -4907,9 +4907,9 @@ static void __exit fios_exit(void)
 	kmem_cache_destroy(cfq_pool);
 }
 
-module_init(fios_init);
-module_exit(fios_exit);
+module_init(fios_init);///xx
+module_exit(fios_exit);///xx
 
-MODULE_AUTHOR("CQUCS");
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("FIOS");
+MODULE_AUTHOR("CQUCS");///xx
+MODULE_LICENSE("GPL");///xx
+MODULE_DESCRIPTION("FIOS");///xx
