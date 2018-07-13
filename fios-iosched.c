@@ -25,6 +25,8 @@
 /* max queue in one round of service */
 static const int cfq_alpha = 50;///xx - default alpha=50(0.5), 0 <= alpha < 100
 static const int cfq_tservice = 8;///xx - Tservice, default=8ms, calc for anticipation
+static const int cfq_tsrv_nr = 1;///xx
+static const u64 cfq_tsrv_sum = 8;///xx
 static const int cfq_quantum = 8;
 static const u64 cfq_fifo_expire[2] = { NSEC_PER_SEC / 4, NSEC_PER_SEC / 8 };
 /* maximum backwards seek, in KiB */
@@ -389,6 +391,8 @@ struct cfq_data {
 	unsigned int cfq_back_max;
 	unsigned int cfq_slice_async_rq;
 	unsigned int cfq_latency;
+	unsigned int cfq_tsrv_nr;///xx - nummer of services for anticipating task
+	u64 cfq_tsrv_sum;///xx - sum of service time for anticipating task
 	u64 cfq_fifo_expire[2];
 	u64 cfq_slice[2];
 	u64 cfq_slice_idle;
@@ -4648,6 +4652,9 @@ static int cfq_init_queue(struct request_queue *q, struct elevator_type *e)
 	INIT_WORK(&cfqd->unplug_work, cfq_kick_queue);
 
 	cfqd->cfq_alpha = cfq_alpha;///xx
+	cfqd->cfq_tservice = cfq_tservice;///xx
+	cfqd->cfq_tsrv_nr = cfq_tsrv_nr;///xx
+	cfqd->cfq_tsrv_sum = cfq_tsrv_sum;///xx
 	cfqd->cfq_quantum = cfq_quantum;
 	cfqd->cfq_fifo_expire[0] = cfq_fifo_expire[0];
 	cfqd->cfq_fifo_expire[1] = cfq_fifo_expire[1];
