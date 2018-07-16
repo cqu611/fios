@@ -27,6 +27,7 @@ static const int cfq_alpha = 50;///xx - default alpha=50(0.5), 0 <= alpha < 100
 static const int cfq_tservice = 8;///xx - Tservice, default=8ms, calc for anticipation
 static const int cfq_tsrv_nr = 1;///xx
 static const u64 cfq_tsrv_sum = 8;///xx
+static const u64 cfq_epoch_slice_nr = 8;///xx - nummer of an epoch timeslices
 static const int cfq_quantum = 8;
 static const u64 cfq_fifo_expire[2] = { NSEC_PER_SEC / 4, NSEC_PER_SEC / 8 };
 /* maximum backwards seek, in KiB */
@@ -158,6 +159,7 @@ struct cfq_queue {
 
 	u32 seek_history;
 	sector_t last_request_pos;
+	int epoch_slice_nr;///xx
 
 	struct cfq_rb_root *service_tree;
 	struct cfq_queue *new_cfqq;
@@ -2700,8 +2702,11 @@ static inline void cfq_slice_expired(struct cfq_data *cfqd, bool timed_out)
 {
 	struct cfq_queue *cfqq = cfqd->active_queue;
 
-	if (cfqq)
+	if (cfqq) {
 		__cfq_slice_expired(cfqd, cfqq, timed_out);
+		if (cfqq->epoch_slice_nr)///xx
+			cfqq->epoch_slice_nr--;///xx
+	}
 }
 
 /*
@@ -2752,9 +2757,37 @@ static struct cfq_queue *cfq_get_next_queue_forced(struct cfq_data *cfqd)
 static struct cfq_queue *cfq_set_active_queue(struct cfq_data *cfqd,
 					      struct cfq_queue *cfqq)
 {
+	struct cfq_queue *start_cfqq;									///xx
 	if (!cfqq)
 		cfqq = cfq_get_next_queue(cfqd);
+	else															///xx
+		goto set_active;											///xx
+		
+//////xx
+	if (!cfqq)
+		return NULL;
+	start_cfqq = cfqq;
+	if (!cfqq->epoch_slice_nr)
+		cfqq = cfq_get_next_queue(cfqd);
+	else
+		goto set_active;
 
+	while (start_cfqq != cfqq) {
+		if (cfqq->epoch_slice_nr && cfqq->queued[0] && cfqq->queued[1])
+			goto set_active;
+		cfqq = cfq_get_next_queue(cfqd);
+	}
+
+	cfqq->epoch_slice_nr = cfq_epoch_slice_nr;
+	cfqq = cfq_get_next_queue(cfqd);
+	while (start_cfqq != cfqq) {
+		cfqq->epoch_slice_nr = cfq_epoch_slice_nr;
+		cfqq = cfq_get_next_queue(cfqd);
+	}
+	return NULL;
+//////xx
+
+set_active:															///xx
 	__cfq_set_active_queue(cfqd, cfqq);
 	return cfqq;
 }
@@ -3747,6 +3780,7 @@ static void cfq_init_cfqq(struct cfq_data *cfqd, struct cfq_queue *cfqq,
 		cfq_mark_cfqq_sync(cfqq);
 	}
 	cfqq->pid = pid;
+	cfqq->epoch_slice_nr = cfq_epoch_slice_nr;///xx
 }
 
 #ifdef CONFIG_CFQ_GROUP_IOSCHED
