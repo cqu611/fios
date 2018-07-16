@@ -4799,7 +4799,7 @@ static ssize_t __FUNC(struct elevator_queue *e, const char *page, size_t count)	
 	return count;							\
 }
 STORE_FUNCTION(cfq_alpha_store, &cfqd->cfq_alpha, 0, 99, 0);///xx
-STORE_FUNCTION(cfq_tservice_store, &cfqd->cfq_tserivce, 0, UINT_MAX, 0);///xx
+STORE_FUNCTION(cfq_tservice_store, &cfqd->cfq_tservice, 0, UINT_MAX, 0);///xx
 STORE_FUNCTION(cfq_quantum_store, &cfqd->cfq_quantum, 1, UINT_MAX, 0);
 STORE_FUNCTION(cfq_fifo_expire_sync_store, &cfqd->cfq_fifo_expire[1], 1,
 		UINT_MAX, 1);
