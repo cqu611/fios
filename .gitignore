@@ -8,3 +8,4 @@ Module.symvers
 *.o
 modules.order
 *.un~
+trace
