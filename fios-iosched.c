@@ -2435,7 +2435,8 @@ static void cfq_add_rq_rb(struct request *rq)
 	struct request *prev;
 
 //////xx
-	struct rb_node **p = &cfqq->sort_list->rb_node;
+	struct rb_root *root = &cfqq->sort_list;
+	struct rb_node **p = &root->rb_node;
 	struct rb_node *parent = NULL;
 	bool is_write = op_is_write(req_op(rq));
 	
