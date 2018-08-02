@@ -1108,6 +1108,11 @@ cfq_choose_req(struct cfq_data *cfqd, struct request *rq1, struct request *rq2, 
 	if (rq_is_sync(rq1) != rq_is_sync(rq2))
 		return rq_is_sync(rq1) ? rq1 : rq2;
 
+	if (req_op(rq1) == req_op(rq2))
+		return rq1;
+	else
+		return op_is_write(req_op(rq1)) ? rq2 : rq1;
+
 	if ((rq1->cmd_flags ^ rq2->cmd_flags) & REQ_PRIO)
 		return rq1->cmd_flags & REQ_PRIO ? rq1 : rq2;
 
@@ -2295,21 +2300,18 @@ cfq_prio_tree_lookup(struct cfq_data *cfqd, struct rb_root *root,
 		struct rb_node **n;
 
 		parent = *p;
-		///xx - cfqq = rb_entry(parent, struct cfq_queue, p_node);
+		cfqq = rb_entry(parent, struct cfq_queue, p_node);
 
 		/*
 		 * Sort strictly based on sector.  Smallest to the left,
 		 * largest to the right.
 		 */
-		
-		///xx - if (sector > blk_rq_pos(cfqq->next_rq))
-		///xx - n = &(*p)->rb_right;
-		///xx - else if (sector < blk_rq_pos(cfqq->next_rq))
-		///xx -	n = &(*p)->rb_left;
-		///xx - else
-		///xx -	break;
-		
-		n = &(*p)->rb_right; ///xx
+		if (sector > blk_rq_pos(cfqq->next_rq))
+			n = &(*p)->rb_right;
+		else if (sector < blk_rq_pos(cfqq->next_rq))
+			n = &(*p)->rb_left;
+		else
+			break;
 		p = n;
 		cfqq = NULL;
 	}
@@ -2317,8 +2319,7 @@ cfq_prio_tree_lookup(struct cfq_data *cfqd, struct rb_root *root,
 	*ret_parent = parent;
 	if (rb_link)
 		*rb_link = p;
-	return NULL;///xx
-///xx - return cfqq;
+	return cfqq;
 }
 
 static void cfq_prio_tree_add(struct cfq_data *cfqd, struct cfq_queue *cfqq)
@@ -2434,28 +2435,9 @@ static void cfq_add_rq_rb(struct request *rq)
 	struct cfq_data *cfqd = cfqq->cfqd;
 	struct request *prev;
 
-//////xx
-	struct rb_root *root = &cfqq->sort_list;
-	struct rb_node **p = &root->rb_node;
-	struct rb_node *parent = NULL;
-	bool is_write = op_is_write(req_op(rq));
-	
-	while (*p) {
-		parent = *p;
-
-		if (is_write)
-			p = &(*p)->rb_right;
-		else
-			p = &(*p)->rb_left;
-	}
-	
-	rb_link_node(&rq->rb_node, parent, p);
-	rb_insert_color(&rq->rb_node, &cfqq->sort_list);	
-//////xx
-
 	cfqq->queued[rq_is_sync(rq)]++;
 
-///xx - delete function call: elv_rb_add(&cfqq->sort_list, rq);
+	elv_rb_add(&cfqq->sort_list, rq);
 
 	if (!cfq_cfqq_on_rr(cfqq))
 		cfq_add_cfqq_rr(cfqd, cfqq);
@@ -2464,7 +2446,7 @@ static void cfq_add_rq_rb(struct request *rq)
 	 * check if this request is a better next-serve candidate
 	 */
 	prev = cfqq->next_rq;
-	///xx - cfqq->next_rq = cfq_choose_req(cfqd, cfqq->next_rq, rq, cfqd->last_position);
+	cfqq->next_rq = cfq_choose_req(cfqd, cfqq->next_rq, rq, cfqd->last_position);
 
 	/*
 	 * adjust priority tree position, if ->next_rq changes
@@ -2837,8 +2819,6 @@ static struct cfq_queue *cfqq_close(struct cfq_data *cfqd,
 	struct rb_node *parent, *node;
 	struct cfq_queue *__cfqq;
 	sector_t sector = cfqd->last_position;
-
-	return NULL; ///xx
 
 	if (RB_EMPTY_ROOT(root))
 		return NULL;
