@@ -829,18 +829,6 @@ __cfq_group_service_tree_add(struct cfq_rb_root *st, struct cfq_group *cfqg)
 	rb_insert_color_cached(&cfqg->rb_node, &st->rb, leftmost);
 }
 
-/*
- * This has to be called only on activation of cfqg
- */
-static void
-cfq_update_group_weight(struct cfq_group *cfqg)
-{
-	if (cfqg->new_weight) {
-		cfqg->weight = cfqg->new_weight;
-		cfqg->new_weight = 0;
-	}
-}
-
 static void
 cfq_update_group_leaf_weight(struct cfq_group *cfqg)
 {
@@ -857,7 +845,6 @@ cfq_group_service_tree_add(struct cfq_rb_root *st, struct cfq_group *cfqg)
 {
 	unsigned int vfr = 1 << CFQ_SERVICE_SHIFT;	/* start with 1 */
 	struct cfq_group *pos = cfqg;
-	struct cfq_group *parent;
 	bool propagate;
 
 	/* add to the service tree */
@@ -938,13 +925,7 @@ cfq_group_service_tree_del(struct cfq_rb_root *st, struct cfq_group *cfqg)
 		/* @pos has 0 nr_active at this point */
 		WARN_ON_ONCE(pos->children_weight);
 		pos->vfraction = 0;
-
-		if (!parent)
-			break;
-
-		propagate = !--parent->nr_active;
-		parent->children_weight -= pos->weight;
-		pos = parent;
+		break;
 	}
 
 	/* remove from the service tree */
@@ -1772,10 +1753,8 @@ static bool cfq_should_idle(struct cfq_data *cfqd, struct cfq_queue *cfqq)
 static void cfq_arm_slice_timer(struct cfq_data *cfqd)
 {
 	struct cfq_queue *cfqq = cfqd->active_queue;
-	struct cfq_rb_root *st = cfqq->service_tree;
 	struct cfq_io_cq *cic;
 	u64 sl, group_idle = 0;
-	u64 now = ktime_get_ns();
 
 	/*
 	 * SSD device without seek penalty, disable idling. But only do so
@@ -2935,7 +2914,6 @@ static void cfq_update_hw_tag(struct cfq_data *cfqd)
 
 static bool cfq_should_wait_busy(struct cfq_data *cfqd, struct cfq_queue *cfqq)
 {
-	struct cfq_io_cq *cic = cfqd->active_cic;
 	u64 now = ktime_get_ns();
 
 	/* If the queue already has requests, don't wait */
@@ -3411,44 +3389,7 @@ static void cfq_registered_queue(struct request_queue *q)
 	wbt_disable_default(q);
 }
 
-/*
- * sysfs parts below -->
- */
-static ssize_t
-cfq_var_show(unsigned int var, char *page)
-{
-	return sprintf(page, "%u\n", var);
-}
-
-static void
-cfq_var_store(unsigned int *var, const char *page)
-{
-	char *p = (char *) page;
-
-	*var = simple_strtoul(p, &p, 10);
-}
-
-#define CFQ_ATTR(name) \
-	__ATTR(name, S_IRUGO|S_IWUSR, cfq_##name##_show, cfq_##name##_store)
-
 static struct elv_fs_entry cfq_attrs[] = {
-	CFQ_ATTR(quantum),
-	CFQ_ATTR(fifo_expire_sync),
-	CFQ_ATTR(fifo_expire_async),
-	CFQ_ATTR(back_seek_max),
-	CFQ_ATTR(back_seek_penalty),
-	CFQ_ATTR(slice_sync),
-	CFQ_ATTR(slice_sync_us),
-	CFQ_ATTR(slice_async),
-	CFQ_ATTR(slice_async_us),
-	CFQ_ATTR(slice_async_rq),
-	CFQ_ATTR(slice_idle),
-	CFQ_ATTR(slice_idle_us),
-	CFQ_ATTR(group_idle),
-	CFQ_ATTR(group_idle_us),
-	CFQ_ATTR(low_latency),
-	CFQ_ATTR(target_latency),
-	CFQ_ATTR(target_latency_us),
 	__ATTR_NULL
 };
 
