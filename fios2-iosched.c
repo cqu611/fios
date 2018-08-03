@@ -174,8 +174,7 @@ enum wl_type_t {
 	SYNC_WORKLOAD = 2
 };
 
-struct cfqg_stats {}
-
+struct cfqg_stats {};
 
 /* This is per cgroup per device grouping structure */
 struct cfq_group {
