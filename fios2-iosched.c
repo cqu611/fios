@@ -1543,9 +1543,36 @@ static struct cfq_queue *cfq_get_next_queue_forced(struct cfq_data *cfqd)
 static struct cfq_queue *cfq_set_active_queue(struct cfq_data *cfqd,
 					      struct cfq_queue *cfqq)
 {
+	struct cfq_queue *start_cfqq;
+
 	if (!cfqq)
 		cfqq = cfq_get_next_queue(cfqd);
+	else															///xx
+		goto set_active;											///xx
 
+	if (!cfqq)
+		return NULL;
+	start_cfqq = cfqq;
+	if (cfqq->epoch_slice >= cfq_epoch_slice)
+		cfqq = cfq_get_next_queue(cfqd);
+	else
+		goto set_active;
+
+	while (start_cfqq != cfqq) {
+		if (cfqq->epoch_slice < cfq_epoch_slice && cfqq->queued[0] && cfqq->queued[1])
+			goto set_active;
+		cfqq = cfq_get_next_queue(cfqd);
+	}
+
+	cfqq->epoch_slice = 0;
+	cfqq = cfq_get_next_queue(cfqd);
+	while (start_cfqq != cfqq) {
+		cfqq->epoch_slice = 0;
+		cfqq = cfq_get_next_queue(cfqd);
+	}
+	return NULL;
+	
+set_active: 
 	__cfq_set_active_queue(cfqd, cfqq);
 	return cfqq;
 }
@@ -2323,6 +2350,8 @@ static int cfq_dispatch_requests(struct request_queue *q, int force)
 	if (!cfq_dispatch_request(cfqd, cfqq))
 		return 0;
 
+	cfqq->epoch_start = ktime_get_ns();
+	
 	cfqq->slice_dispatch++;
 	cfq_clear_cfqq_must_dispatch(cfqq);
 
@@ -2895,6 +2924,7 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 	struct cfq_data *cfqd = cfqq->cfqd;
 	const int sync = rq_is_sync(rq);
 	u64 now = ktime_get_ns();
+	int flag = 0;
 
 	cfq_log_cfqq(cfqd, cfqq, "complete rqnoidle %d", req_noidle(rq));
 
@@ -2910,7 +2940,7 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 
 	if (cfqd->cfq_is_anti) {
 		cfqd->cfq_is_anti = 0;
-		cfqd->cfq_tsrv_sum += (ktime_to_ns() - cfqd->cfq_tsrv_start);
+		cfqd->cfq_tsrv_sum += (now - cfqd->cfq_tsrv_start);
 		cfqd->cfq_tsrv_nr++;
 		cfqd->cfq_tservice = cfqd->cfq_tsrv_sum / cfqd->cfq_tsrv_nr;
 		cfqd->cfq_slice_idle = cfqd->cfq_tservice * (cfqd->cfq_alpha / (100 - cfqd->cfq_alpha));
@@ -2938,7 +2968,10 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 			cfqd->last_delayed_sync = now;
 	}
 
-	if (cfqq->epo)
+	cfqq->epoch_slice += (now - cfqq->epoch_start);
+	if (cfqq->epoch_slice >= cfq_epoch_slice) {
+		flag = 1;
+	}
 
 	/*
 	 * If this is the active queue, check if it needs to be expired,
@@ -2958,7 +2991,7 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 		 */
 		if (cfq_should_wait_busy(cfqd, cfqq)) {
 			cfqd->cfq_is_anti = 1; ///xx
-			cfqd->cfq_tsrv_start = ktime_get_ns();///xx
+			cfqd->cfq_tsrv_start = now;///xx
 			u64 extend_sl = cfqd->cfq_slice_idle;
 			if (!cfqd->cfq_slice_idle) 
 				extend_sl = cfqd->cfq_group_idle;
@@ -2986,6 +3019,9 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 			if (cfqd->active_queue)
 				cfq_slice_expired(cfqd, 0);
 		}
+
+		if (flag && cfqd->active_queue)
+			cfq_slice_expired(cfqd, 0);
 	}
 
 	if (!cfqd->rq_in_driver)
