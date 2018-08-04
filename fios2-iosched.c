@@ -14,13 +14,15 @@
 /*
  * tunables
  */
+static const int cfq_alpha = 50;///xx - default alpha=50(0.5), 0 <= alpha < 100
+static const int cfq_tservice = 8;///xx - Tservice, default=8ms, calc for anticipation
+static const int cfq_tsrv_nr = 1;///xx
+static const u64 cfq_tsrv_sum = 8;///xx
+static const u64 cfq_epoch_slice = NSEC_PER_SEC / 4;///xx - nummer of an epoch timeslices
+
 /* max queue in one round of service */
 static const int cfq_quantum = 8;
 static const u64 cfq_fifo_expire[2] = { NSEC_PER_SEC / 4, NSEC_PER_SEC / 8 };
-/* maximum backwards seek, in KiB */
-static const int cfq_back_max = 16 * 1024;
-/* penalty of a backwards seek */
-static const int cfq_back_penalty = 2;
 static const u64 cfq_slice_sync = NSEC_PER_SEC / 10;
 static u64 cfq_slice_async = NSEC_PER_SEC / 25;
 static const int cfq_slice_async_rq = 2;
@@ -122,6 +124,8 @@ struct cfq_queue {
 	u64 slice_start;
 	u64 slice_end;
 	s64 slice_resid;
+
+	u64 epoch_slice;///xx
 
 	/* pending priority requests */
 	int prio_pending;
@@ -314,9 +318,11 @@ struct cfq_data {
 	/*
 	 * tunables, see top of file
 	 */
+	unsigned int cfq_alpha;///xx - alpha threshold, for calc anticipation.
+	unsigned int cfq_tservice;///xx - Tservice, for calc anticipation.
+	unsigned int cfq_tsrv_nr;///xx - nummer of services for anticipating task
+	u64 cfq_tsrv_sum;///xx - sum of service time for anticipating task
 	unsigned int cfq_quantum;
-	unsigned int cfq_back_penalty;
-	unsigned int cfq_back_max;
 	unsigned int cfq_slice_async_rq;
 	unsigned int cfq_latency;
 	u64 cfq_fifo_expire[2];
@@ -650,12 +656,6 @@ static inline bool cfq_slice_used(struct cfq_queue *cfqq)
 static struct request *
 cfq_choose_req(struct cfq_data *cfqd, struct request *rq1, struct request *rq2, sector_t last)
 {
-	sector_t s1, s2, d1 = 0, d2 = 0;
-	unsigned long back_max;
-#define CFQ_RQ1_WRAP	0x01 /* request 1 wraps */
-#define CFQ_RQ2_WRAP	0x02 /* request 2 wraps */
-	unsigned wrap = 0; /* bit mask: requests behind the disk head? */
-
 	if (rq1 == NULL || rq1 == rq2)
 		return rq2;
 	if (rq2 == NULL)
@@ -667,69 +667,12 @@ cfq_choose_req(struct cfq_data *cfqd, struct request *rq1, struct request *rq2, 
 	if ((rq1->cmd_flags ^ rq2->cmd_flags) & REQ_PRIO)
 		return rq1->cmd_flags & REQ_PRIO ? rq1 : rq2;
 
-	s1 = blk_rq_pos(rq1);
-	s2 = blk_rq_pos(rq2);
-
-	/*
-	 * by definition, 1KiB is 2 sectors
-	 */
-	back_max = cfqd->cfq_back_max * 2;
-
-	/*
-	 * Strict one way elevator _except_ in the case where we allow
-	 * short backward seeks which are biased as twice the cost of a
-	 * similar forward seek.
-	 */
-	if (s1 >= last)
-		d1 = s1 - last;
-	else if (s1 + back_max >= last)
-		d1 = (last - s1) * cfqd->cfq_back_penalty;
-	else
-		wrap |= CFQ_RQ1_WRAP;
-
-	if (s2 >= last)
-		d2 = s2 - last;
-	else if (s2 + back_max >= last)
-		d2 = (last - s2) * cfqd->cfq_back_penalty;
-	else
-		wrap |= CFQ_RQ2_WRAP;
-
-	/* Found required data */
-
-	/*
-	 * By doing switch() on the bit mask "wrap" we avoid having to
-	 * check two variables for all permutations: --> faster!
-	 */
-	switch (wrap) {
-	case 0: /* common case for CFQ: rq1 and rq2 not wrapped */
-		if (d1 < d2)
-			return rq1;
-		else if (d2 < d1)
-			return rq2;
-		else {
-			if (s1 >= s2)
-				return rq1;
-			else
-				return rq2;
-		}
-
-	case CFQ_RQ2_WRAP:
+//////xx - read performance
+	if (req_op(rq1) == req_op(rq2))
 		return rq1;
-	case CFQ_RQ1_WRAP:
-		return rq2;
-	case (CFQ_RQ1_WRAP|CFQ_RQ2_WRAP): /* both rqs wrapped */
-	default:
-		/*
-		 * Since both rqs are wrapped,
-		 * start with the one that's further behind head
-		 * (--> only *one* back seek required),
-		 * since back seek takes more time than forward.
-		 */
-		if (s1 <= s2)
-			return rq1;
-		else
-			return rq2;
-	}
+	else
+		return op_is_write(req_op(rq1)) ? rq2 : rq1;
+//////xx
 }
 
 static struct cfq_queue *cfq_rb_first(struct cfq_rb_root *root)
@@ -2563,7 +2506,8 @@ static void cfq_init_cfqq(struct cfq_data *cfqd, struct cfq_queue *cfqq,
 			cfq_mark_cfqq_idle_window(cfqq);
 		cfq_mark_cfqq_sync(cfqq);
 	}
-	cfqq->pid = pid;
+	cfqq->pid = pid;	
+	cfqq->epoch_slice = cfq_epoch_slice;///xx
 }
 
 static inline void check_blkcg_changed(struct cfq_io_cq *cic, struct bio *bio)
@@ -3350,11 +3294,14 @@ static int cfq_init_queue(struct request_queue *q, struct elevator_type *e)
 
 	INIT_WORK(&cfqd->unplug_work, cfq_kick_queue);
 
+	cfqd->cfq_alpha = cfq_alpha;///xx
+	cfqd->cfq_tservice = cfq_tservice;///xx
+	cfqd->cfq_tsrv_nr = cfq_tsrv_nr;///xx
+	cfqd->cfq_tsrv_sum = cfq_tsrv_sum;///xx
+
 	cfqd->cfq_quantum = cfq_quantum;
 	cfqd->cfq_fifo_expire[0] = cfq_fifo_expire[0];
 	cfqd->cfq_fifo_expire[1] = cfq_fifo_expire[1];
-	cfqd->cfq_back_max = cfq_back_max;
-	cfqd->cfq_back_penalty = cfq_back_penalty;
 	cfqd->cfq_slice[0] = cfq_slice_async;
 	cfqd->cfq_slice[1] = cfq_slice_sync;
 	cfqd->cfq_target_latency = cfq_target_latency;
@@ -3380,8 +3327,8 @@ static void cfq_registered_queue(struct request_queue *q)
 {
 	struct elevator_queue *e = q->elevator;
 	struct cfq_data *cfqd = e->elevator_data;
-
-	cfqd->cfq_slice_idle = 0;
+	
+	cfqd->cfq_slice_idle = cfqd->cfq_tservice * (cfqd->cfq_alpha / (100 - cfqd->cfq_alpha));///xx
 	wbt_disable_default(q);
 }
 
