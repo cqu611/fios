@@ -1,4 +1,5 @@
 obj-m := fios-iosched.o
+obj-m += fios2-iosched.o
 
 CURRENT_PATH := $(shell pwd)
 LINUX_KERNEL_PATH := /root/linux-4.14.2
