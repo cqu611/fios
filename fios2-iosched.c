@@ -15,10 +15,10 @@
  * tunables
  */
 static const int cfq_alpha = 50;///xx - default alpha=50(0.5), 0 <= alpha < 100
-static const int cfq_tservice = 8;///xx - Tservice, default=8ms, calc for anticipation
+static const int cfq_tservice = NSEC_PER_SEC / 125;///xx - Tservice, default=8ms, calc for anticipation
 static const int cfq_tsrv_nr = 1;///xx
-static const u64 cfq_tsrv_sum = 8;///xx
-static const u64 cfq_epoch_slice = NSEC_PER_SEC / 4;///xx - nummer of an epoch timeslices
+static const u64 cfq_tsrv_sum = NSEC_PER_SEC / 125;///xx
+static const u64 cfq_epoch_slice = NSEC_PER_SEC / 8;///xx - nummer of an epoch timeslices
 
 /* max queue in one round of service */
 static const int cfq_quantum = 8;
@@ -125,6 +125,7 @@ struct cfq_queue {
 	u64 slice_end;
 	s64 slice_resid;
 
+	u64 epoch_start;
 	u64 epoch_slice;///xx
 
 	/* pending priority requests */
@@ -321,6 +322,8 @@ struct cfq_data {
 	unsigned int cfq_alpha;///xx - alpha threshold, for calc anticipation.
 	unsigned int cfq_tservice;///xx - Tservice, for calc anticipation.
 	unsigned int cfq_tsrv_nr;///xx - nummer of services for anticipating task
+	unsigned int cfq_is_anti;///xx
+	u64 cfq_tsrv_start;
 	u64 cfq_tsrv_sum;///xx - sum of service time for anticipating task
 	unsigned int cfq_quantum;
 	unsigned int cfq_slice_async_rq;
@@ -1480,6 +1483,8 @@ __cfq_slice_expired(struct cfq_data *cfqd, struct cfq_queue *cfqq,
 		put_io_context(cfqd->active_cic->icq.ioc);
 		cfqd->active_cic = NULL;
 	}
+
+	cfqd->cfq_is_anti = 0;
 }
 
 static inline void cfq_slice_expired(struct cfq_data *cfqd, bool timed_out)
@@ -2507,7 +2512,7 @@ static void cfq_init_cfqq(struct cfq_data *cfqd, struct cfq_queue *cfqq,
 		cfq_mark_cfqq_sync(cfqq);
 	}
 	cfqq->pid = pid;	
-	cfqq->epoch_slice = cfq_epoch_slice;///xx
+	cfqq->epoch_slice = 0;///xx
 }
 
 static inline void check_blkcg_changed(struct cfq_io_cq *cic, struct bio *bio)
@@ -2903,6 +2908,14 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 
 	cfqd->rq_in_flight[cfq_cfqq_sync(cfqq)]--;
 
+	if (cfqd->cfq_is_anti) {
+		cfqd->cfq_is_anti = 0;
+		cfqd->cfq_tsrv_sum += (ktime_to_ns() - cfqd->cfq_tsrv_start);
+		cfqd->cfq_tsrv_nr++;
+		cfqd->cfq_tservice = cfqd->cfq_tsrv_sum / cfqd->cfq_tsrv_nr;
+		cfqd->cfq_slice_idle = cfqd->cfq_tservice * (cfqd->cfq_alpha / (100 - cfqd->cfq_alpha));
+	}
+
 	if (sync) {
 		struct cfq_rb_root *st;
 
@@ -2925,6 +2938,8 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 			cfqd->last_delayed_sync = now;
 	}
 
+	if (cfqq->epo)
+
 	/*
 	 * If this is the active queue, check if it needs to be expired,
 	 * or if we want to idle in case it has no pending requests.
@@ -2942,8 +2957,10 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 		 * the queue.
 		 */
 		if (cfq_should_wait_busy(cfqd, cfqq)) {
+			cfqd->cfq_is_anti = 1; ///xx
+			cfqd->cfq_tsrv_start = ktime_get_ns();///xx
 			u64 extend_sl = cfqd->cfq_slice_idle;
-			if (!cfqd->cfq_slice_idle)
+			if (!cfqd->cfq_slice_idle) 
 				extend_sl = cfqd->cfq_group_idle;
 			cfqq->slice_end = now + extend_sl;
 			cfq_mark_cfqq_wait_busy(cfqq);
@@ -2963,6 +2980,11 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 		else if (sync && cfqq_empty &&
 			 !cfq_close_cooperator(cfqd, cfqq)) {
 			cfq_arm_slice_timer(cfqd);
+		}
+			 
+		if (!cfqd->cfq_is_anti && !cfqq->queued[0] && !cfqq->queued[1]) {
+			if (cfqd->active_queue)
+				cfq_slice_expired(cfqd, 0);
 		}
 	}
 
@@ -3298,6 +3320,7 @@ static int cfq_init_queue(struct request_queue *q, struct elevator_type *e)
 	cfqd->cfq_tservice = cfq_tservice;///xx
 	cfqd->cfq_tsrv_nr = cfq_tsrv_nr;///xx
 	cfqd->cfq_tsrv_sum = cfq_tsrv_sum;///xx
+	cfqd->cfq_is_anti = 0;
 
 	cfqd->cfq_quantum = cfq_quantum;
 	cfqd->cfq_fifo_expire[0] = cfq_fifo_expire[0];
