@@ -1,6 +1,6 @@
 #!/bin/bash
 
-fio -filename=/dev/sda \
+fio -filename=/dev/sdb \
 	-direct=1 \
 	-iodepth 1 \
 	-thread \

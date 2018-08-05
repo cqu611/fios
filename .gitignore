@@ -9,3 +9,4 @@ Module.symvers
 modules.order
 *.un~
 *.result
+result
