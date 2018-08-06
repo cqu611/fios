@@ -1489,7 +1489,7 @@ __cfq_slice_expired(struct cfq_data *cfqd, struct cfq_queue *cfqq,
 
 static inline void cfq_slice_expired(struct cfq_data *cfqd, bool timed_out)
 {
-	cfqd->cfq_is_anti = 0;
+	//cfqd->cfq_is_anti = 0;
 	struct cfq_queue *cfqq = cfqd->active_queue;
 
 	if (cfqq)
@@ -2940,6 +2940,7 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 	cfqd->rq_in_flight[cfq_cfqq_sync(cfqq)]--;
 
 	if (cfqd->cfq_is_anti) {
+		cfqd->cfq_is_anti = 0;
 		cfqd->cfq_tsrv_sum += (now - cfqd->cfq_tsrv_start);
 		cfqd->cfq_tsrv_nr++;
 		cfqd->cfq_tservice = cfqd->cfq_tsrv_sum / cfqd->cfq_tsrv_nr;
